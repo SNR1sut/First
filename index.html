@@ -1,15 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Particle Countdown</title>
+  <title>Particle Countdown Birthday</title>
   <style>
     html, body {
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: #3b0a57; /* Deep purple */
+      background: #3b0a57;
+      font-family: monospace;
     }
     canvas {
       display: block;
@@ -27,14 +28,44 @@ canvas.height = window.innerHeight;
 let width = canvas.width;
 let height = canvas.height;
 
-const backgroundParticles = [];
+const backgroundLetters = "Happy Birthday ".split("");
+const fontSize = 14;
+const columns = Math.floor(width / fontSize);
+const drops = new Array(columns).fill(1);
+
+const stars = [];
 const countdownParticles = [];
-let currentNumber = 1;
 let countdownStarted = false;
-let fontSize = 400;
+let fontSizeLarge = 400;
+let phase = "idle"; // 'idle', 'countdown', 'message'
+
+class Star {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = Math.random() * width;
+    this.y = Math.random() * height;
+    this.size = Math.random() * 2;
+    this.alpha = Math.random();
+    this.alphaChange = 0.02 * (Math.random() < 0.5 ? 1 : -1);
+  }
+  update() {
+    this.alpha += this.alphaChange;
+    if (this.alpha <= 0 || this.alpha >= 1) {
+      this.alphaChange *= -1;
+    }
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${this.alpha})`;
+    ctx.fill();
+  }
+}
 
 class Particle {
-  constructor(x, y, color = 'rgba(255,255,255,0.6)') {
+  constructor(x, y, color = 'white') {
     this.x = Math.random() * width;
     this.y = Math.random() * height;
     this.destX = x;
@@ -62,46 +93,53 @@ class Particle {
   }
 }
 
-function createBackgroundParticles() {
-  for (let i = 0; i < 150; i++) {
-    backgroundParticles.push({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      speed: 0.5 + Math.random(),
-      size: 1 + Math.random() * 2,
-    });
+function createStars(count = 150) {
+  for (let i = 0; i < count; i++) {
+    stars.push(new Star());
   }
 }
 
-function drawBackground() {
-  for (let p of backgroundParticles) {
-    p.y += p.speed;
-    if (p.y > height) p.y = 0;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.1)';
-    ctx.fill();
+function drawStars() {
+  for (let star of stars) {
+    star.update();
+    star.draw();
   }
 }
 
-function createCountdownParticles(text) {
+function drawMatrixText() {
+  ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = "#cc66ff";
+  ctx.font = fontSize + "px monospace";
+
+  for (let i = 0; i < drops.length; i++) {
+    const text = backgroundLetters[Math.floor(Math.random() * backgroundLetters.length)];
+    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+    if (drops[i] * fontSize > height && Math.random() > 0.975) {
+      drops[i] = 0;
+    }
+    drops[i]++;
+  }
+}
+
+function createTextParticles(text) {
   countdownParticles.length = 0;
-  const offscreenCanvas = document.createElement('canvas');
-  offscreenCanvas.width = width;
-  offscreenCanvas.height = height;
-  const offCtx = offscreenCanvas.getContext('2d');
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = width;
+  offCanvas.height = height;
+  const offCtx = offCanvas.getContext('2d');
   offCtx.clearRect(0, 0, width, height);
-  offCtx.font = `bold ${fontSize}px sans-serif`;
+  offCtx.font = `bold ${fontSizeLarge}px sans-serif`;
   offCtx.textAlign = 'center';
   offCtx.fillStyle = 'white';
-  offCtx.fillText(text, width / 2, height / 2 + fontSize / 3);
-
+  offCtx.fillText(text, width / 2, height / 2 + fontSizeLarge / 3);
   const imageData = offCtx.getImageData(0, 0, width, height);
+
   for (let y = 0; y < height; y += 6) {
     for (let x = 0; x < width; x += 6) {
-      let index = (y * width + x) * 4;
-      if (imageData.data[index + 3] > 150) {
-        countdownParticles.push(new Particle(x, y, 'white'));
+      let i = (y * width + x) * 4;
+      if (imageData.data[i + 3] > 150) {
+        countdownParticles.push(new Particle(x, y));
       }
     }
   }
@@ -115,34 +153,37 @@ function drawCountdownParticles() {
 }
 
 function startCountdown() {
-  if (!countdownStarted) {
-    countdownStarted = true;
-    let i = 1;
-    const interval = setInterval(() => {
-      if (i <= 3) {
-        createCountdownParticles(i);
-        i++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 1000);
-  }
+  if (countdownStarted) return;
+  countdownStarted = true;
+  phase = 'countdown';
+  let num = 1;
+  createTextParticles(num);
+
+  const countInterval = setInterval(() => {
+    num++;
+    if (num <= 3) {
+      createTextParticles(num);
+    } else {
+      clearInterval(countInterval);
+      setTimeout(() => {
+        createTextParticles("Happy Birthday");
+        phase = 'message';
+      }, 500);
+    }
+  }, 1000);
 }
 
 function animate() {
   ctx.clearRect(0, 0, width, height);
-  drawBackground();
-  if (countdownStarted) drawCountdownParticles();
+  drawMatrixText();
+  drawStars();
+  if (phase === 'countdown' || phase === 'message') drawCountdownParticles();
   requestAnimationFrame(animate);
 }
 
-createBackgroundParticles();
+createStars();
 animate();
-
-// Delay countdown start by 3s
-setTimeout(() => {
-  startCountdown();
-}, 3000);
+setTimeout(startCountdown, 3000);
 </script>
 </body>
 </html>
