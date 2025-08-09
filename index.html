@@ -1,189 +1,279 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Particle Countdown Birthday</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: #3b0a57;
-      font-family: monospace;
-    }
-    canvas {
-      display: block;
-    }
-  </style>
+  <meta charset="UTF-8" />
+  <title>Happy Birthday with Particle Countdown</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+      font-family: monospace;
+    }
+    #matrix {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    #countdownCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 20;
+      pointer-events: none;
+      background: transparent;
+    }
+    .heart {
+      position: absolute;
+      background: #ff69b4;
+      transform: rotate(45deg);
+      animation: float 5s infinite ease-in;
+      pointer-events: none;
+      z-index: 15;
+    }
+    .heart::before, .heart::after {
+      content: '';
+      position: absolute;
+      background: #ff69b4;
+      border-radius: 50%;
+    }
+    .heart::before {
+      top: -50%;
+      left: 0;
+    }
+    .heart::after {
+      top: 0;
+      left: -50%;
+    }
+    @keyframes float {
+      0% {
+        bottom: -50px;
+        opacity: 0;
+      }
+      50% {
+        opacity: 1;
+      }
+      100% {
+        bottom: 100%;
+        opacity: 0;
+      }
+    }
+  </style>
 </head>
 <body>
-<canvas id="canvas"></canvas>
+
+<canvas id="matrix"></canvas>
+<canvas id="countdownCanvas"></canvas>
+
 <script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+  const matrixCanvas = document.getElementById('matrix');
+  const ctxMatrix = matrixCanvas.getContext('2d');
+  const countdownCanvas = document.getElementById('countdownCanvas');
+  const ctxCountdown = countdownCanvas.getContext('2d');
 
-let width = canvas.width;
-let height = canvas.height;
+  function getResponsiveFontSize() {
+    const w = window.innerWidth;
+    if (w < 400) return 120;
+    if (w < 700) return 180;
+    if (w < 1100) return 250;
+    return 320;
+  }
 
-const backgroundLetters = "Happy Birthday ".split("");
-const fontSize = 14;
-const columns = Math.floor(width / fontSize);
-const drops = new Array(columns).fill(1);
+  function createHeart() {
+    const heart = document.createElement("div");
+    heart.classList.add("heart");
+    const w = window.innerWidth;
+    let size, animDuration;
+    if (w < 400) {
+      size = 12;
+      animDuration = 4 + Math.random() * 2;
+    } else if (w < 700) {
+      size = 16;
+      animDuration = 4 + Math.random() * 2;
+    } else if (w < 1100) {
+      size = 20;
+      animDuration = 5 + Math.random() * 3;
+    } else {
+      size = 24;
+      animDuration = 6 + Math.random() * 3;
+    }
+    heart.style.width = size + "px";
+    heart.style.height = size + "px";
+    heart.style.left = Math.random() * 100 + "vw";
+    heart.style.animationDuration = animDuration + "s";
+    document.body.appendChild(heart);
+    setTimeout(() => heart.remove(), animDuration * 1000);
+  }
 
-const stars = [];
-const countdownParticles = [];
-let countdownStarted = false;
-let fontSizeLarge = 400;
-let phase = "idle"; // 'idle', 'countdown', 'message'
+  let matrixWidth, matrixHeight;
+  let fontSize = 14;
+  let columns;
+  let drops = [];
+  let letters = Array(256).join("Happy Birthday ").split("");
 
-class Star {
-  constructor() {
-    this.reset();
-  }
-  reset() {
-    this.x = Math.random() * width;
-    this.y = Math.random() * height;
-    this.size = Math.random() * 2;
-    this.alpha = Math.random();
-    this.alphaChange = 0.02 * (Math.random() < 0.5 ? 1 : -1);
-  }
-  update() {
-    this.alpha += this.alphaChange;
-    if (this.alpha <= 0 || this.alpha >= 1) {
-      this.alphaChange *= -1;
-    }
-  }
-  draw() {
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255,255,255,${this.alpha})`;
-    ctx.fill();
-  }
-}
+  let countdownParticles = [];
+  let countdownStarted = false;
 
-class Particle {
-  constructor(x, y, color = 'white') {
-    this.x = Math.random() * width;
-    this.y = Math.random() * height;
-    this.destX = x;
-    this.destY = y;
-    this.size = 2 + Math.random() * 2;
-    this.vx = (Math.random() - 0.5) * 10;
-    this.vy = (Math.random() - 0.5) * 10;
-    this.color = color;
-  }
-  update() {
-    let dx = this.destX - this.x;
-    let dy = this.destY - this.y;
-    this.vx += dx * 0.01;
-    this.vy += dy * 0.01;
-    this.vx *= 0.9;
-    this.vy *= 0.9;
-    this.x += this.vx;
-    this.y += this.vy;
-  }
-  draw() {
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-    ctx.fillStyle = this.color;
-    ctx.fill();
-  }
-}
+  function setupCanvasSizes() {
+    matrixCanvas.width = window.innerWidth;
+    matrixCanvas.height = window.innerHeight;
+    countdownCanvas.width = window.innerWidth;
+    countdownCanvas.height = window.innerHeight;
+    matrixWidth = matrixCanvas.width;
+    matrixHeight = matrixCanvas.height;
+    fontSize = 14;
+    columns = Math.floor(matrixWidth / fontSize);
+    drops = [];
+    for (let x = 0; x < columns; x++) drops[x] = 1;
+  }
 
-function createStars(count = 150) {
-  for (let i = 0; i < count; i++) {
-    stars.push(new Star());
-  }
-}
+  function drawMatrix() {
+    ctxMatrix.fillStyle = "rgba(0, 0, 0, 0.05)";
+    ctxMatrix.fillRect(0, 0, matrixWidth, matrixHeight);
+    ctxMatrix.fillStyle = "#cc66ff";
+    ctxMatrix.font = fontSize + "px monospace";
+    for (let i = 0; i < drops.length; i++) {
+      const text = letters[Math.floor(Math.random() * letters.length)];
+      ctxMatrix.fillText(text, i * fontSize, drops[i] * fontSize);
+      if (drops[i] * fontSize > matrixHeight && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    }
+  }
 
-function drawStars() {
-  for (let star of stars) {
-    star.update();
-    star.draw();
-  }
-}
+  class Particle {
+    constructor(x, y, color = 'rgba(204,102,255,0.9)') {
+      this.x = Math.random() * matrixWidth;
+      this.y = Math.random() * matrixHeight;
+      this.destX = x;
+      this.destY = y;
+      this.size = 2 + Math.random();
+      this.vx = (Math.random() - 0.5) * 6;
+      this.vy = (Math.random() - 0.5) * 6;
+      this.color = color;
+    }
+    update() {
+      let dx = this.destX - this.x;
+      let dy = this.destY - this.y;
+      this.vx += dx * 0.01;
+      this.vy += dy * 0.01;
+      this.vx *= 0.85;
+      this.vy *= 0.85;
+      this.x += this.vx;
+      this.y += this.vy;
+    }
+    draw() {
+      ctxCountdown.beginPath();
+      ctxCountdown.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctxCountdown.fillStyle = this.color;
+      ctxCountdown.fill();
+    }
+  }
 
-function drawMatrixText() {
-  ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
-  ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = "#cc66ff";
-  ctx.font = fontSize + "px monospace";
+  function createCountdownParticles(text) {
+    countdownParticles.length = 0;
+    const offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = matrixWidth;
+    offscreenCanvas.height = matrixHeight;
+    const offCtx = offscreenCanvas.getContext('2d');
+    offCtx.clearRect(0, 0, matrixWidth, matrixHeight);
+    const fontSizeResponsive = getResponsiveFontSize();
+    offCtx.font = `bold ${fontSizeResponsive}px sans-serif`;
+    offCtx.textAlign = 'center';
+    offCtx.fillStyle = 'rgba(204,102,255,0.9)';
+    offCtx.fillText(text, matrixWidth / 2, matrixHeight / 2 + fontSizeResponsive / 3);
+    const imageData = offCtx.getImageData(0, 0, matrixWidth, matrixHeight);
+    for (let y = 0; y < matrixHeight; y += 6) {
+      for (let x = 0; x < matrixWidth; x += 6) {
+        let index = (y * matrixWidth + x) * 4;
+        if (imageData.data[index + 3] > 150) {
+          countdownParticles.push(new Particle(x, y, `rgba(204,102,255,${0.5 + Math.random() * 0.5})`));
+        }
+      }
+    }
+  }
 
-  for (let i = 0; i < drops.length; i++) {
-    const text = backgroundLetters[Math.floor(Math.random() * backgroundLetters.length)];
-    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-    if (drops[i] * fontSize > height && Math.random() > 0.975) {
-      drops[i] = 0;
-    }
-    drops[i]++;
-  }
-}
+  function drawCountdownParticles() {
+    ctxCountdown.clearRect(0, 0, matrixWidth, matrixHeight);
+    for (let p of countdownParticles) {
+      p.update();
+      p.draw();
+    }
+  }
 
-function createTextParticles(text) {
-  countdownParticles.length = 0;
-  const offCanvas = document.createElement('canvas');
-  offCanvas.width = width;
-  offCanvas.height = height;
-  const offCtx = offCanvas.getContext('2d');
-  offCtx.clearRect(0, 0, width, height);
-  offCtx.font = `bold ${fontSizeLarge}px sans-serif`;
-  offCtx.textAlign = 'center';
-  offCtx.fillStyle = 'white';
-  offCtx.fillText(text, width / 2, height / 2 + fontSizeLarge / 3);
-  const imageData = offCtx.getImageData(0, 0, width, height);
+  function animateTextParticles(duration, callback) {
+    let frames = 0;
+    const maxFrames = Math.floor(duration / (1000 / 60));
+    function animate() {
+      drawCountdownParticles();
+      frames++;
+      if (frames < maxFrames) {
+        requestAnimationFrame(animate);
+      } else {
+        callback();
+      }
+    }
+    animate();
+  }
 
-  for (let y = 0; y < height; y += 6) {
-    for (let x = 0; x < width; x += 6) {
-      let i = (y * width + x) * 4;
-      if (imageData.data[i + 3] > 150) {
-        countdownParticles.push(new Particle(x, y));
-      }
-    }
-  }
-}
+  function startCountdown() {
+    if (countdownStarted) return;
+    countdownStarted = true;
 
-function drawCountdownParticles() {
-  for (let p of countdownParticles) {
-    p.update();
-    p.draw();
-  }
-}
+    const countdownNumbers = [3, 2, 1];
+    let current = 0;
 
-function startCountdown() {
-  if (countdownStarted) return;
-  countdownStarted = true;
-  phase = 'countdown';
-  let num = 1;
-  createTextParticles(num);
+    function showNextNumber() {
+      if (current < countdownNumbers.length) {
+        createCountdownParticles(countdownNumbers[current]);
+        countdownCanvas.style.display = 'block';
+        animateTextParticles(2000, () => {
+          current++;
+          showNextNumber();
+        });
+      } else {
+        // Show big happy birthday particles for 6 seconds, then stop animation but keep visible
+        createCountdownParticles("🎉 Happy Birthday! 🎉");
+        let frames = 0;
+        const maxFrames = Math.floor(6000 / (1000 / 60));
+        function animateHappy() {
+          drawCountdownParticles();
+          frames++;
+          if (frames < maxFrames) {
+            requestAnimationFrame(animateHappy);
+          } else {
+            // Stop clearing canvas so text stays visible
+            countdownCanvas.style.display = 'block';
+            // Start hearts floating infinitely
+            setInterval(createHeart, 300);
+          }
+        }
+        animateHappy();
+      }
+    }
+    showNextNumber();
+  }
 
-  const countInterval = setInterval(() => {
-    num++;
-    if (num <= 3) {
-      createTextParticles(num);
-    } else {
-      clearInterval(countInterval);
-      setTimeout(() => {
-        createTextParticles("Happy Birthday");
-        phase = 'message';
-      }, 500);
-    }
-  }, 1000);
-}
+  function animate() {
+    drawMatrix();
+    if (countdownStarted) {
+      drawCountdownParticles();
+    }
+    requestAnimationFrame(animate);
+  }
 
-function animate() {
-  ctx.clearRect(0, 0, width, height);
-  drawMatrixText();
-  drawStars();
-  if (phase === 'countdown' || phase === 'message') drawCountdownParticles();
-  requestAnimationFrame(animate);
-}
+  function init() {
+    setupCanvasSizes();
+    startCountdown();
+    animate();
+  }
 
-createStars();
-animate();
-setTimeout(startCountdown, 3000);
+  window.addEventListener('resize', () => {
+    setupCanvasSizes();
+  });
+
+  init();
 </script>
+
 </body>
 </html>
