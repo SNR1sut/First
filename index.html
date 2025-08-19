@@ -1,264 +1,215 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Falling Particle Countdown & Happy Birthday Background</title>
-  <style>
-    html, body {
-      margin: 0; padding: 0; overflow: hidden; height: 100%;
-      background: black;
-    }
-    canvas {
-      display: block;
-      position: fixed;
-      top: 0; left: 0;
-      width: 100vw; height: 100vh;
-    }
-    .heart {
-      position: fixed;
-      width: 20px;
-      height: 20px;
-      background: #ff69b4;
-      transform: rotate(45deg);
-      animation: float 5s infinite ease-in;
-      pointer-events: none;
-      z-index: 10;
-    }
-    .heart::before, .heart::after {
-      content: '';
-      position: absolute;
-      width: 20px;
-      height: 20px;
-      background: #ff69b4;
-      border-radius: 50%;
-    }
-    .heart::before {
-      top: -10px;
-      left: 0;
-    }
-    .heart::after {
-      top: 0;
-      left: -10px;
-    }
-    @keyframes float {
-      0% {
-        bottom: -50px;
-        opacity: 0;
-      }
-      50% {
-        opacity: 1;
-      }
-      100% {
-        bottom: 100%;
-        opacity: 0;
-      }
-    }
-  </style>
+<meta charset="UTF-8">
+<title>HAPPY BIRTHDAY Countdown</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+    font-family: monospace;
+  }
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  #matrix { z-index: 1; }
+  #countdownCanvas { z-index: 20; pointer-events: none; background: transparent; }
+</style>
 </head>
 <body>
 
-<canvas id="canvas"></canvas>
+<canvas id="matrix"></canvas>
+<canvas id="countdownCanvas"></canvas>
 
 <script>
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  let W, H;
+  // --- MATRIX BACKGROUND ---
+  const matrixCanvas = document.getElementById('matrix');
+  const ctxMatrix = matrixCanvas.getContext('2d');
+  matrixCanvas.width = window.innerWidth;
+  matrixCanvas.height = window.innerHeight;
 
-  function resize() {
-    W = window.innerWidth;
-    H = window.innerHeight;
-    canvas.width = W;
-    canvas.height = H;
-  }
-  window.addEventListener('resize', resize);
-  resize();
+  const letters = "HAPPY BIRTHDAY ♥".split("");
+  const fontSize = 18;
+  let columns = Math.floor(matrixCanvas.width / fontSize);
+  let drops = Array(columns).fill(1);
 
-  // Text steps for countdown and final message
-  const steps = ["3", "2", "1", "🎉 Happy Birthday! 🎉"];
-  let stepIndex = 0;
+  function drawMatrix() {
+    ctxMatrix.fillStyle = "rgba(0,0,0,0.05)";
+    ctxMatrix.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+    ctxMatrix.fillStyle = "#FFD700"; // gold
+    ctxMatrix.font = fontSize + "px monospace";
 
-  // Particle class
-  class Particle {
-    constructor(x, y, destX, destY) {
-      this.x = x;
-      this.y = y;
-      this.destX = destX;
-      this.destY = destY;
-      this.size = 2 + Math.random();
-      this.speedY = 2 + Math.random()*2; // falling speed
-      this.color = `rgba(204,102,255,${0.5 + Math.random() * 0.5})`;
-    }
-    update() {
-      // Fall down
-      this.y += this.speedY;
-      if(this.y > H) {
-        this.y = -10 - Math.random()*100; // restart above screen
-        this.x = Math.random()*W;
-      }
-    }
-    draw() {
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
-      ctx.fillStyle = this.color;
-      ctx.fill();
-    }
-  }
+    for (let i = 0; i < drops.length; i++) {
+      const text = letters[Math.floor(Math.random() * letters.length)];
+      ctxMatrix.fillText(text, i * fontSize, drops[i] * fontSize);
+      if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) drops[i] = 0;
+      drops[i]++;
+    }
+  }
 
-  let particles = [];
-  const density = 6; // pixel step for sampling text
+  // --- COUNTDOWN PARTICLES ---
+  const countdownCanvas = document.getElementById('countdownCanvas');
+  const ctxCountdown = countdownCanvas.getContext('2d');
+  countdownCanvas.width = window.innerWidth;
+  countdownCanvas.height = window.innerHeight;
 
-  // Generate target positions for particles from text
-  function createTextTargets(text) {
-    const offscreen = document.createElement('canvas');
-    offscreen.width = W;
-    offscreen.height = H;
-    const offCtx = offscreen.getContext('2d');
+  let width = countdownCanvas.width;
+  let height = countdownCanvas.height;
+  const countdownParticles = [];
+  let countdownStarted = false;
+  let finalStage = false; // track if we're in final message
 
-    // Clear
-    offCtx.clearRect(0,0,W,H);
+  class Particle {
+    constructor(x, y, color) {
+      this.x = Math.random() * width;
+      this.y = Math.random() * height;
+      this.destX = x;
+      this.destY = y;
+      this.size = 2 + Math.random() * 2;
+      this.vx = (Math.random() - 0.5) * 6;
+      this.vy = (Math.random() - 0.5) * 6;
+      this.color = color;
+      this.baseColor = color;
+    }
+    update() {
+      const dx = this.destX - this.x;
+      const dy = this.destY - this.y;
+      this.vx += dx * 0.01;
+      this.vy += dy * 0.01;
+      this.vx *= 0.85;
+      this.vy *= 0.85;
+      this.x += this.vx;
+      this.y += this.vy;
 
-    // Font size depending on screen width
-    let fontSize = W < 400 ? 120 : W < 700 ? 180 : W < 1100 ? 250 : 320;
-    offCtx.font = `bold ${fontSize}px sans-serif`;
-    offCtx.textAlign = 'center';
-    offCtx.fillStyle = 'white';
-    offCtx.fillText(text, W/2, H/2 + fontSize/3);
+      // Twinkle effect for final stage
+      if (finalStage && Math.random() < 0.02) {
+        const alpha = 0.3 + Math.random() * 0.7;
+        this.color = `rgba(255, 255, 153, ${alpha})`;
+      } else if (!finalStage) {
+        this.color = this.baseColor;
+      }
+    }
+    draw() {
+      ctxCountdown.beginPath();
+      ctxCountdown.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctxCountdown.fillStyle = this.color;
+      ctxCountdown.fill();
+    }
+  }
 
-    let targets = [];
-    let imageData = offCtx.getImageData(0,0,W,H);
+  function createCountdownParticles(text, isFinal = false) {
+    countdownParticles.length = 0;
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = width;
+    offCanvas.height = height;
+    const offCtx = offCanvas.getContext('2d');
+    offCtx.clearRect(0, 0, width, height);
 
-    for(let y = 0; y < H; y += density) {
-      for(let x = 0; x < W; x += density) {
-        let idx = (y * W + x) * 4;
-        if(imageData.data[idx + 3] > 128) { // opaque pixel
-          targets.push({x, y});
-        }
-      }
-    }
-    return targets;
-  }
+    // Responsive font size
+    let fontSize;
+    if (isFinal) {
+      fontSize = 100;
+      offCtx.font = `bold ${fontSize}px sans-serif`;
+      while (offCtx.measureText(text).width > width * 0.9 && fontSize > 20) {
+        fontSize -= 2;
+        offCtx.font = `bold ${fontSize}px sans-serif`;
+      }
+    } else {
+      fontSize = Math.min(window.innerWidth * 0.25, window.innerWidth <= 600 ? 140 : 280);
+      offCtx.font = `bold ${fontSize}px sans-serif`;
+    }
 
-  // Initialize particles randomly over screen
-  function initParticles(count) {
-    particles = [];
-    for(let i = 0; i < count; i++) {
-      particles.push(new Particle(Math.random()*W, Math.random()*H, 0, 0));
-    }
-  }
+    offCtx.textAlign = 'center';
+    offCtx.textBaseline = 'middle';
+    offCtx.fillStyle = 'rgba(255, 255, 153, 0.9)';
+    offCtx.shadowColor = "gold";
+    offCtx.shadowBlur = 40;
+    offCtx.fillText(text, width / 2, height / 2);
 
-  // Assign target positions to some particles to "form" the text shape
-  function assignTargets(targets) {
-    // Shuffle particles for random assignment
-    let shuffledParticles = particles.slice();
-    shuffledParticles.sort(() => Math.random() - 0.5);
+    const imgData = offCtx.getImageData(0, 0, width, height);
+    for (let y = 0; y < height; y += 6) {
+      for (let x = 0; x < width; x += 6) {
+        const index = (y * width + x) * 4;
+        if (imgData.data[index + 3] > 150) {
+          countdownParticles.push(
+            new Particle(x, y, `rgba(255, 255, 153,${0.5 + Math.random() * 0.5})`)
+          );
+        }
+      }
+    }
+  }
 
-    for(let i = 0; i < particles.length; i++) {
-      if(i < targets.length) {
-        particles[i].destX = targets[i].x;
-        particles[i].destY = targets[i].y;
-      } else {
-        // No target, keep falling randomly
-        particles[i].destX = null;
-        particles[i].destY = null;
-      }
-    }
-  }
+  function drawCountdownParticles() {
+    for (const p of countdownParticles) {
+      p.update();
+      p.draw();
+    }
+  }
 
-  // Update particles
-  function updateParticles() {
-    for(let p of particles) {
-      if(p.destX !== null && p.destY !== null) {
-        // Particle should try to fall near its target x and y
-        // We'll make it fall vertically and adjust x a bit towards target
+  // --- COUNTDOWN LOGIC WITH NEW DELAYS ---
+  function startCountdown() {
+    if (!countdownStarted) {
+      countdownStarted = true;
+      
+      // LONGER delay before countdown begins
+      setTimeout(() => {
+        let i = 3;
+        createCountdownParticles(i, false);
+        countdownCanvas.style.display = 'block';
 
-        p.y += p.speedY;
-        if(p.y > H) p.y = -10 - Math.random()*100;
+        // Each step = 1.8s (nice pacing for excitement)
+        const interval = setInterval(() => {
+          i--;
+          if (i > 0) {
+            createCountdownParticles(i, false);
+          } else {
+            clearInterval(interval);
 
-        // Slight horizontal correction to move towards destX
-        let dx = p.destX - p.x;
-        p.x += dx * 0.05;
+            // Pause before showing HAPPY BIRTHDAY
+            setTimeout(() => {
+              finalStage = true;
+              createCountdownParticles("HAPPY BIRTHDAY", true);
 
-        // When near destination vertically, reset to above for continuous falling
-        if(p.y > p.destY) {
-          p.y = -10 - Math.random()*100;
-          p.x = Math.random()*W;
-        }
-      } else {
-        // Free falling particle with no target
-        p.update();
-      }
-    }
-  }
+              // Show HAPPY BIRTHDAY for 4s, then date
+              setTimeout(() => {
+                createCountdownParticles("5.1.2001", true);
+              }, 4000);
 
-  // Draw particles
-  function drawParticles() {
-    for(let p of particles) {
-      p.draw();
-    }
-  }
+            }, 1500); // pause after "1"
+          }
+        }, 1800); // each number shows for 1.8s
+      }, 3000); // wait 3s before countdown starts
+    }
+  }
 
-  // Main animation loop
-  let stepTargets = [];
-  let stepDuration = 4000; // ms for each countdown step + final text
-  let stepStartTime = null;
+  // --- MAIN ANIMATION LOOP ---
+  function animate() {
+    drawMatrix();
+    if (countdownStarted) {
+      ctxCountdown.clearRect(0, 0, width, height);
+      drawCountdownParticles();
+    }
+    requestAnimationFrame(animate);
+  }
 
-  // Hearts floating effect
+  // --- INIT ---
+  startCountdown();
+  animate();
 
-  function createHeart() {
-    const heart = document.createElement("div");
-    heart.className = "heart";
-    const size = W < 400 ? 12 : W < 700 ? 16 : 20;
-    heart.style.width = size + "px";
-    heart.style.height = size + "px";
-    heart.style.left = Math.random() * 100 + "vw";
-    heart.style.animationDuration = (4 + Math.random() * 3) + "s";
-    document.body.appendChild(heart);
-    setTimeout(() => heart.remove(), 7000);
-  }
-
-  let heartsInterval = null;
-  function startHearts() {
-    if(heartsInterval) return;
-    heartsInterval = setInterval(createHeart, 300);
-  }
-
-  function animate(time = 0) {
-    if(!stepStartTime) stepStartTime = time;
-    ctx.clearRect(0, 0, W, H);
-
-    // Draw black translucent bg for trailing effect
-    ctx.fillStyle = "rgba(0,0,0,0.1)";
-    ctx.fillRect(0, 0, W, H);
-
-    // Draw falling particles and text shape
-    updateParticles();
-    drawParticles();
-
-    // Handle step timing
-    if(time - stepStartTime > stepDuration) {
-      stepIndex++;
-      if(stepIndex >= steps.length) {
-        // Final step reached - keep last text and start hearts
-        startHearts();
-        stepIndex = steps.length - 1; // stop incrementing
-      } else {
-        // Prepare next step
-        stepTargets = createTextTargets(steps[stepIndex]);
-        assignTargets(stepTargets);
-        stepStartTime = time;
-      }
-    }
-
-    requestAnimationFrame(animate);
-  }
-
-  // Start first step
-  stepTargets = createTextTargets(steps[0]);
-  initParticles(1000); // number of particles total
-  assignTargets(stepTargets);
-
-  animate();
-
+  // --- RESIZE HANDLER ---
+  window.addEventListener('resize', () => {
+    matrixCanvas.width = window.innerWidth;
+    matrixCanvas.height = window.innerHeight;
+    countdownCanvas.width = window.innerWidth;
+    countdownCanvas.height = window.innerHeight;
+    width = countdownCanvas.width;
+    height = countdownCanvas.height;
+    columns = Math.floor(matrixCanvas.width / fontSize);
+    drops = Array(columns).fill(1);
+  });
 </script>
 
 </body>
