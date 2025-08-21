@@ -7,7 +7,7 @@
   body {
     margin: 0;
     overflow: hidden;
-    background: black;
+    background: #0a0a0f;
     font-family: monospace;
   }
   canvas {
@@ -16,7 +16,7 @@
     left: 0;
   }
   #matrix { z-index: 1; }
-  #countdownCanvas { z-index: 20; pointer-events: none; background: transparent; }
+  #countdownCanvas { z-index: 20; pointer-events: none; display: none; }
 </style>
 </head>
 <body>
@@ -25,192 +25,171 @@
 <canvas id="countdownCanvas"></canvas>
 
 <script>
-  // --- MATRIX BACKGROUND ---
-  const matrixCanvas = document.getElementById('matrix');
-  const ctxMatrix = matrixCanvas.getContext('2d');
-  matrixCanvas.width = window.innerWidth;
-  matrixCanvas.height = window.innerHeight;
+// -------------------- CONFIG --------------------
+const themeColors = ['#FFD700','#FFB6C1','#FF69B4','#DA70D6','#BA55D3','#FFA07A','#FFFACD'];
+function randomColor(){ return themeColors[Math.floor(Math.random()*themeColors.length)]; }
 
-  const letters = "HAPPY BIRTHDAY ♥".split("");
-  const fontSize = 18;
-  let columns = Math.floor(matrixCanvas.width / fontSize);
-  let drops = Array(columns).fill(1);
+const matrixLetters = "HAPPY BIRTHDAY ♥".split("");
+const fontSize = 20;
 
-  function drawMatrix() {
-    ctxMatrix.fillStyle = "rgba(0,0,0,0.05)";
-    ctxMatrix.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
-    ctxMatrix.fillStyle = "#FFD700"; // gold
-    ctxMatrix.font = fontSize + "px monospace";
+// -------------------- MATRIX --------------------
+const matrixCanvas = document.getElementById('matrix');
+const ctxMatrix = matrixCanvas.getContext('2d');
+let width = window.innerWidth;
+let height = window.innerHeight;
+matrixCanvas.width = width;
+matrixCanvas.height = height;
 
-    for (let i = 0; i < drops.length; i++) {
-      const text = letters[Math.floor(Math.random() * letters.length)];
-      ctxMatrix.fillText(text, i * fontSize, drops[i] * fontSize);
-      if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) drops[i] = 0;
-      drops[i]++;
+let columns = Math.floor(width / fontSize);
+let drops = Array(columns).fill(0);
+let offsets = Array(columns).fill(0).map(()=>Math.floor(Math.random()*matrixLetters.length));
+
+function drawMatrix() {
+  ctxMatrix.fillStyle = "rgba(10,10,15,0.05)";
+  ctxMatrix.fillRect(0,0,width,height);
+  ctxMatrix.font = fontSize+"px monospace";
+  for(let i=0;i<columns;i++){
+    const char = matrixLetters[(drops[i]+offsets[i])%matrixLetters.length];
+    ctxMatrix.fillStyle = randomColor();
+    ctxMatrix.fillText(char,i*fontSize,drops[i]*fontSize);
+    drops[i]++;
+    if(drops[i]*fontSize>height && Math.random()>0.975){
+      drops[i]=0;
+      offsets[i]=Math.floor(Math.random()*matrixLetters.length);
     }
   }
+}
 
-  // --- COUNTDOWN PARTICLES ---
-  const countdownCanvas = document.getElementById('countdownCanvas');
-  const ctxCountdown = countdownCanvas.getContext('2d');
-  countdownCanvas.width = window.innerWidth;
-  countdownCanvas.height = window.innerHeight;
+// -------------------- PARTICLES --------------------
+const countdownCanvas = document.getElementById('countdownCanvas');
+const ctxCountdown = countdownCanvas.getContext('2d');
+countdownCanvas.width = width;
+countdownCanvas.height = height;
+const particles = [];
+let countdownStarted = false;
+let finalStage = false;
 
-  let width = countdownCanvas.width;
-  let height = countdownCanvas.height;
-  const countdownParticles = [];
-  let countdownStarted = false;
-  let finalStage = false; // track if we're in final message
+class Particle {
+  constructor(x,y,color){
+    this.x=Math.random()*width;
+    this.y=Math.random()*height;
+    this.destX=x;
+    this.destY=y;
+    this.size=2+Math.random()*2;
+    this.vx=(Math.random()-0.5)*6;
+    this.vy=(Math.random()-0.5)*6;
+    this.color=color;
+    this.baseColor=color;
+  }
+  update(){
+    const dx=this.destX-this.x;
+    const dy=this.destY-this.y;
+    this.vx+=dx*0.02;
+    this.vy+=dy*0.02;
+    this.vx*=0.85;
+    this.vy*=0.85;
+    this.x+=this.vx;
+    this.y+=this.vy;
+    if(finalStage && Math.random()<0.02){
+      const alpha=0.4+Math.random()*0.6;
+      this.color=`rgba(255,255,200,${alpha})`;
+    } else this.color=this.baseColor;
+  }
+  draw(){
+    ctxCountdown.beginPath();
+    ctxCountdown.arc(this.x,this.y,this.size,0,Math.PI*2);
+    ctxCountdown.fillStyle=this.color;
+    ctxCountdown.fill();
+  }
+}
 
-  class Particle {
-    constructor(x, y, color) {
-      this.x = Math.random() * width;
-      this.y = Math.random() * height;
-      this.destX = x;
-      this.destY = y;
-      this.size = 2 + Math.random() * 2;
-      this.vx = (Math.random() - 0.5) * 6;
-      this.vy = (Math.random() - 0.5) * 6;
-      this.color = color;
-      this.baseColor = color;
-    }
-    update() {
-      const dx = this.destX - this.x;
-      const dy = this.destY - this.y;
-      this.vx += dx * 0.01;
-      this.vy += dy * 0.01;
-      this.vx *= 0.85;
-      this.vy *= 0.85;
-      this.x += this.vx;
-      this.y += this.vy;
+// -------------------- PARTICLE CREATION --------------------
+function createParticles(text, isFinal = false){
+  particles.length = 0;
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = width;
+  offCanvas.height = height;
+  const offCtx = offCanvas.getContext('2d');
 
-      // Twinkle effect for final stage
-      if (finalStage && Math.random() < 0.02) {
-        const alpha = 0.3 + Math.random() * 0.7;
-        this.color = `rgba(255, 255, 153, ${alpha})`;
-      } else if (!finalStage) {
-        this.color = this.baseColor;
-      }
-    }
-    draw() {
-      ctxCountdown.beginPath();
-      ctxCountdown.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-      ctxCountdown.fillStyle = this.color;
-      ctxCountdown.fill();
+  // Adjust font size
+  let fSize = isFinal ? 90 : Math.min(width*0.2, 180); // smaller for final text, bigger for numbers
+  offCtx.font = `bold ${fSize}px sans-serif`;
+  offCtx.textAlign = 'center';
+  offCtx.textBaseline = 'middle';
+  offCtx.fillStyle = randomColor();
+  offCtx.shadowColor = "#FFD700";
+  offCtx.shadowBlur = 50;
+  offCtx.fillText(text,width/2,height/2);
+
+  const imgData = offCtx.getImageData(0,0,width,height);
+  for(let y=0;y<height;y+=6){
+    for(let x=0;x<width;x+=6){
+      const idx=(y*width+x)*4;
+      if(imgData.data[idx+3]>150) particles.push(new Particle(x,y,randomColor()));
     }
   }
+}
 
-  function createCountdownParticles(text, isFinal = false) {
-    countdownParticles.length = 0;
-    const offCanvas = document.createElement('canvas');
-    offCanvas.width = width;
-    offCanvas.height = height;
-    const offCtx = offCanvas.getContext('2d');
-    offCtx.clearRect(0, 0, width, height);
+// -------------------- COUNTDOWN --------------------
+function startCountdown(){
+  if(countdownStarted) return;
+  countdownStarted = true;
 
-    // Responsive font size
-    let fontSize;
-    if (isFinal) {
-      fontSize = 100;
-      offCtx.font = `bold ${fontSize}px sans-serif`;
-      while (offCtx.measureText(text).width > width * 0.9 && fontSize > 20) {
-        fontSize -= 2;
-        offCtx.font = `bold ${fontSize}px sans-serif`;
-      }
-    } else {
-      fontSize = Math.min(window.innerWidth * 0.25, window.innerWidth <= 600 ? 140 : 280);
-      offCtx.font = `bold ${fontSize}px sans-serif`;
-    }
+  setTimeout(()=>{
+    let i = 3;
+    createParticles(i.toString());
+    countdownCanvas.style.display='block';
 
-    offCtx.textAlign = 'center';
-    offCtx.textBaseline = 'middle';
-    offCtx.fillStyle = 'rgba(255, 255, 153, 0.9)';
-    offCtx.shadowColor = "gold";
-    offCtx.shadowBlur = 40;
-    offCtx.fillText(text, width / 2, height / 2);
-
-    const imgData = offCtx.getImageData(0, 0, width, height);
-    for (let y = 0; y < height; y += 6) {
-      for (let x = 0; x < width; x += 6) {
-        const index = (y * width + x) * 4;
-        if (imgData.data[index + 3] > 150) {
-          countdownParticles.push(
-            new Particle(x, y, `rgba(255, 255, 153,${0.5 + Math.random() * 0.5})`)
-          );
+    const interval = setInterval(()=>{
+      i--;
+      if(i>0) createParticles(i.toString());
+      else{
+        clearInterval(interval);
+        // FINAL TEXT SEQUENCE
+        const sequence = ["HAPPY BIRTHDAY","TO","SENGRA LAHPAI","5.1.2001"];
+        let idx = 0;
+        function nextText(){
+          finalStage = true;
+          createParticles(sequence[idx],true);
+          idx++;
+          if(idx<sequence.length) setTimeout(nextText,2500);
         }
+        setTimeout(nextText,1500);
       }
-    }
+    },1800);
+  },2000);
+}
+
+// -------------------- ANIMATE --------------------
+function drawParticles(){
+  for(const p of particles){ p.update(); p.draw(); }
+}
+
+function animate(){
+  drawMatrix();
+  if(countdownStarted){
+    ctxCountdown.clearRect(0,0,width,height);
+    drawParticles();
   }
+  requestAnimationFrame(animate);
+}
 
-  function drawCountdownParticles() {
-    for (const p of countdownParticles) {
-      p.update();
-      p.draw();
-    }
-  }
+// -------------------- RESIZE --------------------
+window.addEventListener('resize',()=>{
+  width=window.innerWidth;
+  height=window.innerHeight;
+  matrixCanvas.width=width;
+  matrixCanvas.height=height;
+  countdownCanvas.width=width;
+  countdownCanvas.height=height;
+  columns=Math.floor(width/fontSize);
+  drops=Array(columns).fill(0);
+  offsets=Array(columns).fill(0).map(()=>Math.floor(Math.random()*matrixLetters.length));
+});
 
-  // --- COUNTDOWN LOGIC WITH NEW DELAYS ---
-  function startCountdown() {
-    if (!countdownStarted) {
-      countdownStarted = true;
-      
-      // LONGER delay before countdown begins
-      setTimeout(() => {
-        let i = 3;
-        createCountdownParticles(i, false);
-        countdownCanvas.style.display = 'block';
-
-        // Each step = 1.8s (nice pacing for excitement)
-        const interval = setInterval(() => {
-          i--;
-          if (i > 0) {
-            createCountdownParticles(i, false);
-          } else {
-            clearInterval(interval);
-
-            // Pause before showing HAPPY BIRTHDAY
-            setTimeout(() => {
-              finalStage = true;
-              createCountdownParticles("HAPPY BIRTHDAY", true);
-
-              // Show HAPPY BIRTHDAY for 4s, then date
-              setTimeout(() => {
-                createCountdownParticles("5.1.2001", true);
-              }, 4000);
-
-            }, 1500); // pause after "1"
-          }
-        }, 1800); // each number shows for 1.8s
-      }, 3000); // wait 3s before countdown starts
-    }
-  }
-
-  // --- MAIN ANIMATION LOOP ---
-  function animate() {
-    drawMatrix();
-    if (countdownStarted) {
-      ctxCountdown.clearRect(0, 0, width, height);
-      drawCountdownParticles();
-    }
-    requestAnimationFrame(animate);
-  }
-
-  // --- INIT ---
-  startCountdown();
-  animate();
-
-  // --- RESIZE HANDLER ---
-  window.addEventListener('resize', () => {
-    matrixCanvas.width = window.innerWidth;
-    matrixCanvas.height = window.innerHeight;
-    countdownCanvas.width = window.innerWidth;
-    countdownCanvas.height = window.innerHeight;
-    width = countdownCanvas.width;
-    height = countdownCanvas.height;
-    columns = Math.floor(matrixCanvas.width / fontSize);
-    drops = Array(columns).fill(1);
-  });
+// -------------------- START --------------------
+startCountdown();
+animate();
 </script>
-
 </body>
 </html>
