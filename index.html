@@ -1,38 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>HAPPY BIRTHDAY Countdown</title>
-<style>
-  body {
-    margin: 0;
-    overflow: hidden;
-    background: #0a0a0f;
-    font-family: monospace;
-  }
-  canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-  }
-  #matrix { z-index: 1; }
-  #countdownCanvas { z-index: 20; pointer-events: none; display: none; }
-</style>
+  <meta charset="UTF-8" />
+  <title>HAPPY BIRTHDAY Countdown</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: monospace;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    #matrix { z-index: 1; }
+    #countdownCanvas { z-index: 20; pointer-events: none; display: none; }
+    #sparkleCanvas { z-index: 5; pointer-events: none; opacity: 0; display: none; transition: opacity 3s; }
+  </style>
 </head>
 <body>
 
 <canvas id="matrix"></canvas>
 <canvas id="countdownCanvas"></canvas>
+<canvas id="sparkleCanvas"></canvas>
 
 <script>
-// -------------------- CONFIG --------------------
-const themeColors = ['#FFD700','#FFB6C1','#FF69B4','#DA70D6','#BA55D3','#FFA07A','#FFFACD'];
-function randomColor(){ return themeColors[Math.floor(Math.random()*themeColors.length)]; }
 
-const matrixLetters = "HAPPY BIRTHDAY ♥".split("");
-const fontSize = 20;
+<!-- ===================== ADDED: Background Music (loop) ===================== -->
+(function() {
+  // 1) Set your file path or URL here:
+  const MUSIC_SRC = 'music001.mp3'; // e.g., 'audio/happy-birthday.mp3' or a direct URL
 
-// -------------------- MATRIX --------------------
+  // 2) Create the audio element
+  const bgm = new Audio(MUSIC_SRC);
+  bgm.loop = true;
+  bgm.preload = 'auto';
+  bgm.volume = 0.7;         // adjust if you want (0.0 - 1.0)
+  bgm.setAttribute('playsinline', ''); // iOS inline playback
+
+  // If some browsers ignore loop, force-restart on end
+  bgm.addEventListener('ended', () => {
+    if (!bgm.loop) {
+      bgm.currentTime = 0;
+      bgm.play().catch(() => {});
+    }
+  });
+
+  // 3) Try to autoplay immediately
+  function tryPlay() {
+    const p = bgm.play();
+    if (p && typeof p.then === 'function') {
+      p.then(() => {
+        removePrompt();
+        removeUnlockers();
+      }).catch(() => {
+        showPrompt();
+      });
+    }
+  }
+
+  // 4) Minimal prompt if autoplay is blocked
+  let promptEl = null;
+  function showPrompt() {
+    if (promptEl) return;
+    promptEl = document.createElement('div');
+    promptEl.id = 'musicPrompt';
+    promptEl.textContent = 'Tap to play music ▶';
+    promptEl.style.cssText = `
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.55);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 20px;
+      font: 14px/1.2 monospace;
+      letter-spacing: 0.5px;
+      z-index: 999;
+      cursor: pointer;
+      user-select: none;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+    `;
+    promptEl.addEventListener('click', tryPlay);
+    document.body.appendChild(promptEl);
+  }
+  function removePrompt() {
+    if (promptEl && promptEl.parentNode) promptEl.parentNode.removeChild(promptEl);
+    promptEl = null;
+  }
+
+  // 5) Unlock on first user gesture anywhere
+  function unlock() { tryPlay(); }
+  function removeUnlockers() {
+    document.removeEventListener('click', unlock);
+    document.removeEventListener('touchstart', unlock);
+    document.removeEventListener('keydown', unlock);
+  }
+  document.addEventListener('click', unlock, { once: true });
+  document.addEventListener('touchstart', unlock, { passive: true, once: true });
+  document.addEventListener('keydown', unlock, { once: true });
+
+  // Kick off right away
+  tryPlay();
+})();
+
+
+
+// THEME: unified to rose-pink (matches the heart)
+const THEME = {
+  primary: '#ea80b0',
+  light: '#f7c9dc',
+  stroke: '234,128,176' // rgb of #ea80b0
+};
+
+// ---------------- MATRIX (falling style from new code) ----------------
 const matrixCanvas = document.getElementById('matrix');
 const ctxMatrix = matrixCanvas.getContext('2d');
 let width = window.innerWidth;
@@ -40,156 +124,616 @@ let height = window.innerHeight;
 matrixCanvas.width = width;
 matrixCanvas.height = height;
 
+const matrixLetters = "Love you ♥".split(""); // your letters
+const fontSize = 20; // keep original font size
 let columns = Math.floor(width / fontSize);
 let drops = Array(columns).fill(0);
-let offsets = Array(columns).fill(0).map(()=>Math.floor(Math.random()*matrixLetters.length));
+let charIndexes = Array(columns).fill(0);
+let stopNewDrops = false;
+
+function getRandomInitialY() {
+  return Math.floor(Math.random() * (-height / fontSize - 1));
+}
+drops = drops.map(() => getRandomInitialY());
+
+// falling speed style from new code
+const FALL_INTERVAL_MS = 50;
+setInterval(drawMatrix, FALL_INTERVAL_MS);
 
 function drawMatrix() {
-  ctxMatrix.fillStyle = "rgba(10,10,15,0.05)";
-  ctxMatrix.fillRect(0,0,width,height);
-  ctxMatrix.font = fontSize+"px monospace";
-  for(let i=0;i<columns;i++){
-    const char = matrixLetters[(drops[i]+offsets[i])%matrixLetters.length];
-    ctxMatrix.fillStyle = randomColor();
-    ctxMatrix.fillText(char,i*fontSize,drops[i]*fontSize);
+  ctxMatrix.fillStyle = 'rgba(0,0,0,0.05)'; // fading trail effect
+  ctxMatrix.fillRect(0, 0, width, height);
+  ctxMatrix.fillStyle = THEME.primary;
+  ctxMatrix.font = fontSize + 'px monospace';
+
+  for (let i = 0; i < columns; i++) {
+    const ch = matrixLetters[charIndexes[i]];
+    ctxMatrix.fillText(ch, i * fontSize, drops[i] * fontSize);
+    charIndexes[i] = (charIndexes[i] + 1) % matrixLetters.length;
     drops[i]++;
-    if(drops[i]*fontSize>height && Math.random()>0.975){
-      drops[i]=0;
-      offsets[i]=Math.floor(Math.random()*matrixLetters.length);
+    if (drops[i] * fontSize > height && !stopNewDrops) {
+      drops[i] = getRandomInitialY();
     }
   }
 }
 
-// -------------------- PARTICLES --------------------
+// ---------------- COUNTDOWN PARTICLES ----------------
 const countdownCanvas = document.getElementById('countdownCanvas');
 const ctxCountdown = countdownCanvas.getContext('2d');
 countdownCanvas.width = width;
 countdownCanvas.height = height;
-const particles = [];
+let particles = [];
 let countdownStarted = false;
-let finalStage = false;
 
 class Particle {
-  constructor(x,y,color){
-    this.x=Math.random()*width;
-    this.y=Math.random()*height;
-    this.destX=x;
-    this.destY=y;
-    this.size=2+Math.random()*2;
-    this.vx=(Math.random()-0.5)*6;
-    this.vy=(Math.random()-0.5)*6;
-    this.color=color;
-    this.baseColor=color;
+  constructor(x, y, isText = false) {
+    this.destX = x;
+    this.destY = y;
+    this.x = isText ? width / 2 + (Math.random() - 0.5) * 100 : Math.random() * width;
+    this.y = isText ? height / 2 + (Math.random() - 0.5) * 100 : Math.random() * height;
+    this.vx = (Math.random() - 0.5) * 6;
+    this.vy = (Math.random() - 0.5) * 6;
+    this.size = 2 + Math.random() * 2;
+    this.color = THEME.primary;
+    this.shadow = 20;
   }
-  update(){
-    const dx=this.destX-this.x;
-    const dy=this.destY-this.y;
-    this.vx+=dx*0.02;
-    this.vy+=dy*0.02;
-    this.vx*=0.85;
-    this.vy*=0.85;
-    this.x+=this.vx;
-    this.y+=this.vy;
-    if(finalStage && Math.random()<0.02){
-      const alpha=0.4+Math.random()*0.6;
-      this.color=`rgba(255,255,200,${alpha})`;
-    } else this.color=this.baseColor;
+  update() {
+    const dx = this.destX - this.x;
+    const dy = this.destY - this.y;
+    this.vx += dx * 0.015;
+    this.vy += dy * 0.015;
+    this.vx *= 0.85;
+    this.vy *= 0.85;
+    this.x += this.vx;
+    this.y += this.vy;
   }
-  draw(){
+  draw() {
     ctxCountdown.beginPath();
-    ctxCountdown.arc(this.x,this.y,this.size,0,Math.PI*2);
-    ctxCountdown.fillStyle=this.color;
+    ctxCountdown.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctxCountdown.fillStyle = this.color;
+    ctxCountdown.shadowColor = this.color;
+    ctxCountdown.shadowBlur = this.shadow;
     ctxCountdown.fill();
   }
 }
 
-// -------------------- PARTICLE CREATION --------------------
-function createParticles(text, isFinal = false){
+function createParticles(text, isText = false) {
   particles.length = 0;
   const offCanvas = document.createElement('canvas');
   offCanvas.width = width;
   offCanvas.height = height;
   const offCtx = offCanvas.getContext('2d');
 
-  // Adjust font size
-  let fSize = isFinal ? 90 : Math.min(width*0.2, 180); // smaller for final text, bigger for numbers
-  offCtx.font = `bold ${fSize}px sans-serif`;
+  // --- BIGGER SIZE ONLY FOR 3,2,1 ---
+  let fSize;
+  if (text === '3' || text === '2' || text === '1') fSize = 180; // bigger size
+  else fSize = 90; // default size for other texts
+
+  offCtx.font = `900 ${fSize}px sans-serif`;
   offCtx.textAlign = 'center';
   offCtx.textBaseline = 'middle';
-  offCtx.fillStyle = randomColor();
-  offCtx.shadowColor = "#FFD700";
-  offCtx.shadowBlur = 50;
-  offCtx.fillText(text,width/2,height/2);
+  offCtx.fillStyle = THEME.primary;
 
-  const imgData = offCtx.getImageData(0,0,width,height);
-  for(let y=0;y<height;y+=6){
-    for(let x=0;x<width;x+=6){
-      const idx=(y*width+x)*4;
-      if(imgData.data[idx+3]>150) particles.push(new Particle(x,y,randomColor()));
+  const lines = text.split('\n');
+  if (lines.length === 1) {
+    offCtx.fillText(text, width / 2, height / 2);
+  } else {
+    const lineHeight = fSize * 1.1;
+    const totalHeight = lines.length * lineHeight;
+    const startY = height / 2 - totalHeight / 2 + lineHeight / 2;
+    lines.forEach((line, i) => {
+      offCtx.fillText(line, width / 2, startY + i * lineHeight);
+    });
+  }
+
+  const imgData = offCtx.getImageData(0, 0, width, height);
+  const step = 5;
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const idx = (y * width + x) * 4;
+      if (imgData.data[idx + 3] > 150) {
+        particles.push(new Particle(x, y, isText));
+      }
     }
   }
 }
 
-// -------------------- COUNTDOWN --------------------
-function startCountdown(){
-  if(countdownStarted) return;
-  countdownStarted = true;
+function drawParticles() {
+  for (const p of particles) {
+    p.update();
+    p.draw();
+  }
+}
 
-  setTimeout(()=>{
+// ---------------- COUNTDOWN SEQUENCE ----------------
+function startCountdown() {
+  if (countdownStarted) return;
+  countdownStarted = true;
+  setTimeout(() => {
     let i = 3;
     createParticles(i.toString());
-    countdownCanvas.style.display='block';
-
-    const interval = setInterval(()=>{
+    countdownCanvas.style.display = 'block';
+    const interval = setInterval(() => {
       i--;
-      if(i>0) createParticles(i.toString());
-      else{
+      if (i > 0) {
+        createParticles(i.toString());
+      } else {
         clearInterval(interval);
-        // FINAL TEXT SEQUENCE
-        const sequence = ["HAPPY BIRTHDAY","TO","SENGRA LAHPAI","5.1.2001"];
+        const sequence = ["HAPPY BIRTHDAY", "TO", "SENGRA LAHPAI", "HAPPY\nSEPTEMBER 12"];
         let idx = 0;
-        function nextText(){
-          finalStage = true;
-          createParticles(sequence[idx],true);
+        function nextText() {
+          createParticles(sequence[idx], true);
+          let delay = 2000;
+          if (sequence[idx] === "HAPPY BIRTHDAY") delay = 5000;
+          if (sequence[idx] === "SENGRA LAHPAI") delay = 6000;
           idx++;
-          if(idx<sequence.length) setTimeout(nextText,2500);
+          if (idx < sequence.length) setTimeout(nextText, delay);
+          else setTimeout(() => {
+            stopNewDrops = true;
+            fadeInSparkles();
+          }, 3000);
         }
-        setTimeout(nextText,1500);
+        setTimeout(nextText, 2000);
       }
-    },1800);
-  },2000);
+    }, 2000);
+  }, 2000);
 }
 
-// -------------------- ANIMATE --------------------
-function drawParticles(){
-  for(const p of particles){ p.update(); p.draw(); }
+// ---------------- SPARKLE BACKGROUND ----------------
+function fadeInSparkles() {
+  const sparkleCanvas = document.getElementById('sparkleCanvas');
+  sparkleCanvas.style.display = 'block';
+  let opacity = 0;
+  const ctx = sparkleCanvas.getContext('2d');
+  sparkleCanvas.width = width;
+  sparkleCanvas.height = height;
+
+  // Unified pink sparkle palette
+  const colors = ['#ffd6e8','#ffc2df','#ffadd5','#ff97cc','#ff82c2','#ea80b0'];
+
+  class Sparkle {
+    constructor() { this.reset(); }
+    reset() {
+      this.x = Math.random() * width;
+      this.y = Math.random() * height;
+      this.size = 1 + Math.random() * 3;
+      this.speedX = (Math.random() - 0.5) * 1.5;
+      this.speedY = (Math.random() - 0.5) * 1.5;
+      this.color = colors[Math.floor(Math.random() * colors.length)];
+      this.alpha = 0.2 + Math.random() * 0.8;
+    }
+    update() {
+      this.x += this.speedX;
+      this.y += this.speedY;
+      if (this.x < 0 || this.x > width || this.y < 0 || this.y > height) this.reset();
+      this.alpha += (Math.random() - 0.5) * 0.05;
+      if (this.alpha > 1) this.alpha = 1;
+      if (this.alpha < 0.1) this.alpha = 0.1;
+    }
+    draw() {
+      const toRGB = (hex) => {
+        hex = hex.replace('#','');
+        const n = parseInt(hex,16);
+        return `${(n>>16)&255},${(n>>8)&255},${n&255}`;
+      };
+      const rgb = toRGB(this.color);
+      const sc = `rgba(${rgb},${this.alpha})`;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+      ctx.fillStyle = sc;
+      ctx.fill();
+    }
+  }
+
+  const sparkleCount = 300;
+  const sparkles = [];
+  for (let i=0;i<sparkleCount;i++) sparkles.push(new Sparkle());
+
+  function drawLines() {
+    for (let i=0;i<sparkleCount;i++){
+      for (let j=i+1;j<sparkleCount;j++){
+        const dx = sparkles[i].x - sparkles[j].x;
+        const dy = sparkles[i].y - sparkles[j].y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 100) {
+          ctx.strokeStyle = `rgba(${THEME.stroke},${(1 - dist/100) * 0.2})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(sparkles[i].x,sparkles[i].y);
+          ctx.lineTo(sparkles[j].x,sparkles[j].y);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  function animateSparkle() {
+    ctx.fillStyle = "rgba(0,0,0,0.1)";
+    ctx.fillRect(0,0,width,height);
+    sparkles.forEach(p=>{p.update(); p.draw();});
+    drawLines();
+    requestAnimationFrame(animateSparkle);
+  }
+
+  const fadeInterval = setInterval(() => {
+    opacity += 0.02;
+    if (opacity >= 1) { opacity = 1; clearInterval(fadeInterval); }
+    sparkleCanvas.style.opacity = opacity;
+  }, 50);
+
+  animateSparkle();
 }
 
-function animate(){
-  drawMatrix();
-  if(countdownStarted){
+// ---------------- ANIMATE ----------------
+function animate() {
+  if (countdownStarted) {
     ctxCountdown.clearRect(0,0,width,height);
     drawParticles();
   }
   requestAnimationFrame(animate);
 }
 
-// -------------------- RESIZE --------------------
+// ---------------- RESIZE ----------------
 window.addEventListener('resize',()=>{
-  width=window.innerWidth;
-  height=window.innerHeight;
-  matrixCanvas.width=width;
-  matrixCanvas.height=height;
-  countdownCanvas.width=width;
-  countdownCanvas.height=height;
-  columns=Math.floor(width/fontSize);
-  drops=Array(columns).fill(0);
-  offsets=Array(columns).fill(0).map(()=>Math.floor(Math.random()*matrixLetters.length));
+  width = window.innerWidth;
+  height = window.innerHeight;
+  matrixCanvas.width = width;
+  matrixCanvas.height = height;
+  countdownCanvas.width = width;
+  countdownCanvas.height = height;
+  const oldColumns = columns;
+  columns = Math.floor(width / fontSize);
+  if (columns > oldColumns) {
+    for (let i = oldColumns; i < columns; i++) {
+      drops[i] = getRandomInitialY();
+      charIndexes[i] = 0;
+    }
+  } else if (columns < oldColumns) {
+    drops.splice(columns);
+    charIndexes.splice(columns);
+  }
 });
 
-// -------------------- START --------------------
+// ---------------- START ----------------
 startCountdown();
 animate();
+
+/* ===================== ADDED: Elegant September Disappear + Heart + Typing Quote =====================
+   - Keeps particle counts like your original (no extra density)
+   - Text mask is crisp/equal (hi-DPI sampling, same density)
+   - "HAPPY SEPTEMBER 12" spreads away gently, then fades out, then heart+quote fades in
+*/
+(function() {
+  const countdownCanvas = document.getElementById('countdownCanvas');
+
+  // Ensure countdown canvas can fade nicely (short and elegant)
+  countdownCanvas.style.transition = 'opacity 1s ease';
+
+  // 1) CRISP TEXT MASK without adding more particles (same step=5)
+  function createParticlesHiDPI(text, isText = false) {
+    particles.length = 0;
+
+    const dpr = Math.min(2, window.devicePixelRatio || 1); // cap for perf
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = Math.floor(width * dpr);
+    offCanvas.height = Math.floor(height * dpr);
+    const offCtx = offCanvas.getContext('2d');
+    offCtx.scale(dpr, dpr);
+
+    let fSize = (text === '3' || text === '2' || text === '1') ? 180 : 90;
+    offCtx.font = `900 ${fSize}px sans-serif`;
+    offCtx.textAlign = 'center';
+    offCtx.textBaseline = 'middle';
+    offCtx.fillStyle = '#ffffff'; // solid white for clean threshold
+
+    const lines = text.split('\n');
+    if (lines.length === 1) {
+      offCtx.fillText(text, width / 2, height / 2);
+    } else {
+      const lineHeight = fSize * 1.1;
+      const totalHeight = lines.length * lineHeight;
+      const startY = height / 2 - totalHeight / 2 + lineHeight / 2;
+      lines.forEach((line, i) => {
+        offCtx.fillText(line, width / 2, startY + i * lineHeight);
+      });
+    }
+
+    const imgData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+    const step = 5; // same as your original
+    for (let y = 0; y < height; y += step) {
+      for (let x = 0; x < width; x += step) {
+        const idx = (Math.floor(y * dpr) * offCanvas.width + Math.floor(x * dpr)) * 4;
+        if (imgData.data[idx + 3] > 160) {
+          particles.push(new Particle(x, y, isText));
+        }
+      }
+    }
+  }
+  // Override your generator with crisp one (same density)
+  window.createParticles = createParticlesHiDPI;
+  createParticles = createParticlesHiDPI;
+
+  // 2) ELEGANT SPREAD on disappear (minimal, no extra particles)
+  let scatterActive = false;
+  let scatterStarted = false;
+  let scatterEndTime = 0;
+
+  function enableScatter(durationMs = 900) {
+    scatterActive = true;
+    scatterStarted = false;
+    scatterEndTime = performance.now() + durationMs;
+  }
+
+  // Override drawParticles to add a gentle outward push only during scatter
+  const drawParticlesOriginal = function() {
+    for (const p of particles) { p.update(); p.draw(); }
+  };
+
+  function drawParticlesScatter() {
+    const now = performance.now();
+    if (scatterActive) {
+      if (!scatterStarted) scatterStarted = true;
+
+      for (const p of particles) {
+        if (!p._scInit) {
+          // Push away from center with a tiny random swirl
+          const dx = p.x - width / 2;
+          const dy = p.y - height / 2;
+          const len = Math.sqrt(dx*dx + dy*dy) || 1;
+          const nx = dx / len, ny = dy / len;
+          const swirl = 0.5 * (Math.random() - 0.5);
+          // Single nudge, small to keep it elegant
+          p.vx += nx * 1.2 + (-ny) * swirl;
+          p.vy += ny * 1.2 + (nx) * swirl;
+          p._scInit = true;
+        }
+        // light extra drift while scattering
+        p.vx *= 0.99;
+        p.vy *= 0.99;
+      }
+
+      for (const p of particles) { p.update(); p.draw(); }
+
+      if (now > scatterEndTime) {
+        scatterActive = false;
+      }
+    } else {
+      drawParticlesOriginal();
+    }
+  }
+
+  // Replace global drawParticles
+  window.drawParticles = drawParticlesScatter;
+  drawParticles = drawParticlesScatter;
+
+  // 3) Orchestrate timing: after 6s total of "HAPPY SEPTEMBER 12", scatter + fade, then show love overlay
+  let scheduled = false;
+  const watcher = setInterval(() => {
+    if (!scheduled && typeof stopNewDrops !== 'undefined' && stopNewDrops === true) {
+      scheduled = true;
+      clearInterval(watcher);
+      setTimeout(() => {
+        // Start elegant spread
+        enableScatter(900);
+        // Fade out while spreading
+        countdownCanvas.style.opacity = '0';
+        const fadeOutMs = 1000;
+        setTimeout(() => {
+          countdownCanvas.style.display = 'none';
+          showLoveAnimations({ fadeInMs: 1800 });
+        }, fadeOutMs + 50);
+      }, 3000); // 3s more -> 6s total since the last text appeared
+    }
+  }, 200);
+
+  // 4) Heart + Typing Quote (simple, non-heavy)
+  function showLoveAnimations({ fadeInMs = 1800 } = {}) {
+    // Load fonts (optional)
+    const fontLink = document.createElement('link');
+    fontLink.rel = 'stylesheet';
+    fontLink.href = 'https://fonts.googleapis.com/css2?family=Pacifico&family=Dancing+Script:wght@400;700&display=swap';
+    document.head.appendChild(fontLink);
+
+    // Overlay container
+    const overlay = document.createElement('div');
+    overlay.id = 'loveOverlay';
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity ${fadeInMs}ms ease;
+      color: #fff;
+      padding: 20px;
+      box-sizing: border-box;
+      text-align: center;
+    `;
+
+    // Typing quote
+    const quoteEl = document.createElement('div');
+    quoteEl.id = 'loveQuote';
+    quoteEl.style.cssText = `
+      font-family: 'Pacifico', 'Dancing Script', cursive;
+      font-size: clamp(20px, 4vw, 32px);
+      line-height: 1.3;
+      max-width: 70%;
+      white-space: pre-wrap;
+      overflow: hidden;
+      border-right: 2px solid #fff;
+      padding-right: 6px;
+      margin-bottom: 20px;
+      word-break: break-word;
+    `;
+
+    // Heart container + canvas
+    const heartWrap = document.createElement('div');
+    heartWrap.id = 'loveHeartContainer';
+    heartWrap.style.cssText = `
+      width: min(500px, 90vw);
+      height: min(350px, 50vh);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    `;
+    const heartCanvas = document.createElement('canvas');
+    heartCanvas.id = 'loveHeartCanvas';
+    heartCanvas.style.cssText = 'position: relative; width: 100%; height: 100%; display: block;';
+    heartWrap.appendChild(heartCanvas);
+
+    overlay.appendChild(quoteEl);
+    overlay.appendChild(heartWrap);
+    document.body.appendChild(overlay);
+
+    // Fade overlay in
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+    });
+
+    // Typing effect
+    const quoteText = "Change the world with your smile,\nbut don't let the world change your smile.";
+    (function typeQuote(el, text, speed) {
+      let i = 0;
+      function tick() {
+        if (i < text.length) {
+          el.textContent += text.charAt(i);
+          i++;
+          setTimeout(tick, speed);
+        } else {
+          el.style.borderRight = 'none';
+        }
+      }
+      tick();
+    })(quoteEl, quoteText, 50);
+
+    // Heart particles (simple, original-style)
+    (function startHeart(canvas) {
+      const ctx = canvas.getContext('2d');
+      const settings = { particles: { length: 400, duration: 2, velocity: 80, effect: -0.75, size: 15 } };
+
+      function Point(x,y){ this.x=x||0; this.y=y||0; }
+      Point.prototype.clone = function(){ return new Point(this.x,this.y); };
+      Point.prototype.length = function(len){
+        if (len===undefined) return Math.sqrt(this.x*this.x+this.y*this.y);
+        this.normalize(); this.x*=len; this.y*=len; return this;
+      };
+      Point.prototype.normalize = function(){
+        const l=this.length(); if (l){ this.x/=l; this.y/=l; } return this;
+      };
+
+      function PParticle(){ this.position=new Point(); this.velocity=new Point(); this.acceleration=new Point(); this.age=0; }
+      PParticle.prototype.initialize = function(x,y,dx,dy){
+        this.position.x=x; this.position.y=y;
+        this.velocity.x=dx; this.velocity.y=dy;
+        this.acceleration.x=dx*settings.particles.effect;
+        this.acceleration.y=dy*settings.particles.effect;
+        this.age=0;
+      };
+      PParticle.prototype.update = function(dt){
+        this.position.x+=this.velocity.x*dt; this.position.y+=this.velocity.y*dt;
+        this.velocity.x+=this.acceleration.x*dt; this.velocity.y+=this.acceleration.y*dt;
+        this.age+=dt;
+      };
+      PParticle.prototype.draw = function(c,img,scalePulse){
+        function ease(t){return (--t)*t*t+1;}
+        const size = img.width * ease(this.age/settings.particles.duration) * scalePulse;
+        c.globalAlpha = 1 - this.age/settings.particles.duration;
+        c.drawImage(img, this.position.x - size/2, this.position.y - size/2, size, size);
+      };
+
+      function ParticlePool(length){
+        this.particles=[]; this.firstActive=0; this.firstFree=0; this.duration=settings.particles.duration;
+        for(let i=0;i<length;i++) this.particles.push(new PParticle());
+      }
+      ParticlePool.prototype.add = function(x,y,dx,dy){
+        const p=this.particles[this.firstFree];
+        p.initialize(x,y,dx,dy);
+        this.firstFree++; if(this.firstFree===this.particles.length) this.firstFree=0;
+        if(this.firstActive===this.firstFree){ this.firstActive++; if(this.firstActive===this.particles.length) this.firstActive=0; }
+      };
+      ParticlePool.prototype.update = function(dt){
+        let i;
+        if(this.firstActive<this.firstFree){ for(i=this.firstActive;i<this.firstFree;i++) this.particles[i].update(dt); }
+        if(this.firstFree<this.firstActive){
+          for(i=this.firstActive;i<this.particles.length;i++) this.particles[i].update(dt);
+          for(i=0;i<this.firstFree;i++) this.particles[i].update(dt);
+        }
+        while(this.particles[this.firstActive].age>=this.duration && this.firstActive!==this.firstFree){
+          this.firstActive++; if(this.firstActive===this.particles.length) this.firstActive=0;
+        }
+      };
+      ParticlePool.prototype.draw = function(c,img,scalePulse){
+        let i;
+        if(this.firstActive<this.firstFree){ for(i=this.firstActive;i<this.firstFree;i++) this.particles[i].draw(c,img,scalePulse); }
+        if(this.firstFree<this.firstActive){
+          for(i=this.firstActive;i<this.particles.length;i++) this.particles[i].draw(c,img,scalePulse);
+          for(i=0;i<this.firstFree;i++) this.particles[i].draw(c,img,scalePulse);
+        }
+      };
+
+      function pointOnHeart(t, scale){
+        return new Point(
+          scale * (16*Math.pow(Math.sin(t),3)),
+          -scale * (13*Math.cos(t)-6*Math.cos(2*t)-3*Math.cos(3*t)-Math.cos(4*t))
+        );
+      }
+
+      function createParticleImage(size){
+        const c=document.createElement('canvas'), cx=c.getContext('2d');
+        c.width=c.height=size;
+        const scale=size/20;
+        cx.beginPath();
+        let t=-Math.PI, p=pointOnHeart(t,scale);
+        cx.moveTo(p.x+size/2,p.y+size/2);
+        while(t<Math.PI){ t+=0.01; p=pointOnHeart(t,scale); cx.lineTo(p.x+size/2,p.y+size/2); }
+        cx.closePath(); cx.fillStyle = THEME.primary; // simple pink fill
+        cx.fill();
+        const img=new Image(); img.src=c.toDataURL(); return img;
+      }
+
+      const image = createParticleImage(settings.particles.size);
+      const pool = new ParticlePool(settings.particles.length);
+      const particleRate = settings.particles.length / settings.particles.duration;
+      let time, pulse=1, pulseDirection=0.003;
+
+      function resize(){
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+      }
+      window.addEventListener('resize', resize);
+
+      function render(){
+        requestAnimationFrame(render);
+        const newTime = Date.now()/1000;
+        const dt = newTime - (time || newTime);
+        time = newTime;
+
+        pulse += pulseDirection;
+        if (pulse > 1.05 || pulse < 0.95) pulseDirection *= -1;
+
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+
+        const amount = particleRate * dt;
+        for(let i=0;i<amount;i++){
+          const scale = Math.min(canvas.width, canvas.height) / 45;
+          const pos = pointOnHeart(Math.PI - 2*Math.PI*Math.random(), scale);
+          const dir = pos.clone().length(settings.particles.velocity);
+          pool.add(canvas.width/2 + pos.x, canvas.height/2 + pos.y, dir.x, dir.y);
+        }
+
+        pool.update(dt);
+        pool.draw(ctx, image, pulse);
+      }
+
+      resize();
+      render();
+    })(heartCanvas);
+  }
+})();
 </script>
 </body>
 </html>
