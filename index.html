@@ -26,30 +26,64 @@
 <canvas id="countdownCanvas"></canvas>
 <canvas id="sparkleCanvas"></canvas>
 
-<!-- ADDED: Autoplay + loop background music (no UI) -->
-<audio id="bgm" autoplay loop preload="auto" playsinline style="display:none"> <source src="./music.mp3" type="audio/mpeg"> </audio>
+<!-- Add this before </body> -->
+<audio id="bgMusic" src="./music.mp3" autoplay loop muted playsinline preload="auto"></audio>
+
 <script>
+(function(){
+  const bgMusic = document.getElementById('bgMusic');
 
-(function() { const bgm = document.getElementById('bgm'); if (!bgm) return; bgm.volume = 0.8; // 0.0–1.0
-    // Try to autoplay now
-const tryPlay = () => bgm.play().catch(() => {/* autoplay may be blocked until user interacts */});
-tryPlay();
+  // Try autoplay (muted) immediately
+  function tryPlay() {
+    const p = bgMusic.play();
+    if (p !== undefined) {
+      p.then(() => console.log('bgMusic autoplay succeeded (may be muted).'))
+       .catch(err => console.warn('bgMusic autoplay blocked:', err));
+    }
+  }
+  tryPlay();
 
-// If autoplay is blocked, start on first user gesture (no visible button)
-const unlock = () => { tryPlay(); cleanup(); };
-function cleanup(){
-  window.removeEventListener('pointerdown', unlock, true);
-  window.removeEventListener('keydown', unlock, true);
-  window.removeEventListener('touchstart', unlock, true);
-}
-window.addEventListener('pointerdown', unlock, { once: true, capture: true });
-window.addEventListener('keydown', unlock, { once: true, capture: true });
-window.addEventListener('touchstart', unlock, { once: true, capture: true });
+  // On first user gesture, unmute & play (most browsers accept this)
+  function unlockAudio() {
+    bgMusic.muted = false;
+    const p = bgMusic.play();
+    if (p !== undefined) {
+      p.then(() => console.log('bgMusic unmuted & playing'))
+       .catch(err => console.warn('bgMusic play after gesture failed:', err));
+    }
+    removeListeners();
+  }
 
-// Debug if file can’t load
-bgm.addEventListener('error', () => {
-  console.log('Audio error:', bgm.error);
-});
+  function removeListeners() {
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
+    window.removeEventListener('keydown', unlockAudio);
+  }
+
+  window.addEventListener('click', unlockAudio, { once: true });
+  window.addEventListener('touchstart', unlockAudio, { once: true });
+  window.addEventListener('keydown', unlockAudio, { once: true });
+
+  // If the audio file cannot be loaded, let us know
+  bgMusic.addEventListener('error', (e) => {
+    console.error('bgMusic error', e);
+    alert('Audio failed to load. Check the file path or try a full https:// URL for your audio file.');
+  });
+
+  // Fallback: if still paused after a short time, show small "Enable sound" button
+  setTimeout(() => {
+    if (bgMusic.paused) {
+      const btn = document.createElement('button');
+      btn.textContent = 'Enable sound';
+      btn.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:9999;padding:8px 12px;border-radius:8px;background:#ea80b0;color:#fff;border:none;font-weight:600;';
+      btn.onclick = function(){
+        bgMusic.muted = false;
+        bgMusic.play().catch(err => console.warn('play failed from button:', err));
+        btn.remove();
+      };
+      document.body.appendChild(btn);
+    }
+  }, 1500);
 })();
 
 // THEME: unified to rose-pink (matches the heart)
