@@ -26,88 +26,31 @@
 <canvas id="countdownCanvas"></canvas>
 <canvas id="sparkleCanvas"></canvas>
 
+<!-- ADDED: Autoplay + loop background music (no UI) -->
+<audio id="bgm" autoplay loop preload="auto" playsinline style="display:none"> <source src="./music.mp3" type="audio/mpeg"> </audio>
 <script>
 
-<!-- ===================== ADDED: Background Music (loop) ===================== -->
-(function() {
-  // 1) Set your file path or URL here:
-  const MUSIC_SRC = 'music001.mp3'; // e.g., 'audio/happy-birthday.mp3' or a direct URL
+(function() { const bgm = document.getElementById('bgm'); if (!bgm) return; bgm.volume = 0.8; // 0.0–1.0
+    // Try to autoplay now
+const tryPlay = () => bgm.play().catch(() => {/* autoplay may be blocked until user interacts */});
+tryPlay();
 
-  // 2) Create the audio element
-  const bgm = new Audio(MUSIC_SRC);
-  bgm.loop = true;
-  bgm.preload = 'auto';
-  bgm.volume = 0.7;         // adjust if you want (0.0 - 1.0)
-  bgm.setAttribute('playsinline', ''); // iOS inline playback
+// If autoplay is blocked, start on first user gesture (no visible button)
+const unlock = () => { tryPlay(); cleanup(); };
+function cleanup(){
+  window.removeEventListener('pointerdown', unlock, true);
+  window.removeEventListener('keydown', unlock, true);
+  window.removeEventListener('touchstart', unlock, true);
+}
+window.addEventListener('pointerdown', unlock, { once: true, capture: true });
+window.addEventListener('keydown', unlock, { once: true, capture: true });
+window.addEventListener('touchstart', unlock, { once: true, capture: true });
 
-  // If some browsers ignore loop, force-restart on end
-  bgm.addEventListener('ended', () => {
-    if (!bgm.loop) {
-      bgm.currentTime = 0;
-      bgm.play().catch(() => {});
-    }
-  });
-
-  // 3) Try to autoplay immediately
-  function tryPlay() {
-    const p = bgm.play();
-    if (p && typeof p.then === 'function') {
-      p.then(() => {
-        removePrompt();
-        removeUnlockers();
-      }).catch(() => {
-        showPrompt();
-      });
-    }
-  }
-
-  // 4) Minimal prompt if autoplay is blocked
-  let promptEl = null;
-  function showPrompt() {
-    if (promptEl) return;
-    promptEl = document.createElement('div');
-    promptEl.id = 'musicPrompt';
-    promptEl.textContent = 'Tap to play music ▶';
-    promptEl.style.cssText = `
-      position: fixed;
-      left: 50%;
-      bottom: 24px;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.55);
-      color: #fff;
-      padding: 10px 16px;
-      border-radius: 20px;
-      font: 14px/1.2 monospace;
-      letter-spacing: 0.5px;
-      z-index: 999;
-      cursor: pointer;
-      user-select: none;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.4);
-    `;
-    promptEl.addEventListener('click', tryPlay);
-    document.body.appendChild(promptEl);
-  }
-  function removePrompt() {
-    if (promptEl && promptEl.parentNode) promptEl.parentNode.removeChild(promptEl);
-    promptEl = null;
-  }
-
-  // 5) Unlock on first user gesture anywhere
-  function unlock() { tryPlay(); }
-  function removeUnlockers() {
-    document.removeEventListener('click', unlock);
-    document.removeEventListener('touchstart', unlock);
-    document.removeEventListener('keydown', unlock);
-  }
-  document.addEventListener('click', unlock, { once: true });
-  document.addEventListener('touchstart', unlock, { passive: true, once: true });
-  document.addEventListener('keydown', unlock, { once: true });
-
-  // Kick off right away
-  tryPlay();
+// Debug if file can’t load
+bgm.addEventListener('error', () => {
+  console.log('Audio error:', bgm.error);
+});
 })();
-
-
 
 // THEME: unified to rose-pink (matches the heart)
 const THEME = {
@@ -476,18 +419,15 @@ animate();
 
       for (const p of particles) {
         if (!p._scInit) {
-          // Push away from center with a tiny random swirl
           const dx = p.x - width / 2;
           const dy = p.y - height / 2;
           const len = Math.sqrt(dx*dx + dy*dy) || 1;
           const nx = dx / len, ny = dy / len;
           const swirl = 0.5 * (Math.random() - 0.5);
-          // Single nudge, small to keep it elegant
           p.vx += nx * 1.2 + (-ny) * swirl;
           p.vy += ny * 1.2 + (nx) * swirl;
           p._scInit = true;
         }
-        // light extra drift while scattering
         p.vx *= 0.99;
         p.vy *= 0.99;
       }
@@ -513,28 +453,24 @@ animate();
       scheduled = true;
       clearInterval(watcher);
       setTimeout(() => {
-        // Start elegant spread
         enableScatter(900);
-        // Fade out while spreading
         countdownCanvas.style.opacity = '0';
         const fadeOutMs = 1000;
         setTimeout(() => {
           countdownCanvas.style.display = 'none';
           showLoveAnimations({ fadeInMs: 1800 });
         }, fadeOutMs + 50);
-      }, 3000); // 3s more -> 6s total since the last text appeared
+      }, 3000);
     }
   }, 200);
 
   // 4) Heart + Typing Quote (simple, non-heavy)
   function showLoveAnimations({ fadeInMs = 1800 } = {}) {
-    // Load fonts (optional)
     const fontLink = document.createElement('link');
     fontLink.rel = 'stylesheet';
     fontLink.href = 'https://fonts.googleapis.com/css2?family=Pacifico&family=Dancing+Script:wght@400;700&display=swap';
     document.head.appendChild(fontLink);
 
-    // Overlay container
     const overlay = document.createElement('div');
     overlay.id = 'loveOverlay';
     overlay.style.cssText = `
@@ -554,7 +490,6 @@ animate();
       text-align: center;
     `;
 
-    // Typing quote
     const quoteEl = document.createElement('div');
     quoteEl.id = 'loveQuote';
     quoteEl.style.cssText = `
@@ -570,7 +505,6 @@ animate();
       word-break: break-word;
     `;
 
-    // Heart container + canvas
     const heartWrap = document.createElement('div');
     heartWrap.id = 'loveHeartContainer';
     heartWrap.style.cssText = `
@@ -589,12 +523,10 @@ animate();
     overlay.appendChild(heartWrap);
     document.body.appendChild(overlay);
 
-    // Fade overlay in
     requestAnimationFrame(() => {
       overlay.style.opacity = '1';
     });
 
-    // Typing effect
     const quoteText = "Change the world with your smile,\nbut don't let the world change your smile.";
     (function typeQuote(el, text, speed) {
       let i = 0;
@@ -610,7 +542,6 @@ animate();
       tick();
     })(quoteEl, quoteText, 50);
 
-    // Heart particles (simple, original-style)
     (function startHeart(canvas) {
       const ctx = canvas.getContext('2d');
       const settings = { particles: { length: 400, duration: 2, velocity: 80, effect: -0.75, size: 15 } };
